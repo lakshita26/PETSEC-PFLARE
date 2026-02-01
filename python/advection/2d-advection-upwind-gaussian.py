@@ -1,5 +1,5 @@
 import matplotlib
-# Force matplotlib to not use any Xwindow backend (fixes VS Code display issues)
+# Force matplotlib to not use any Xwindow backend
 matplotlib.use('Agg') 
 
 import numpy as np
@@ -21,12 +21,9 @@ except ModuleNotFoundError:
 2D Linear pure advection equation
 u_t + a_x u_x + a_y u_y = 0
 
-Implicit UPWIND scheme (Backward Euler)
+Implicit UPWIND scheme
 Dirichlet boundary condition
-Top Hat / Square Wave Initial Condition
-
-Solver: GMRES
-Preconditioner: AMG (GAMG) or Jacobi
+Gaussian initial condition
 '''
 
 # --------------------------------------------------
@@ -36,8 +33,8 @@ ax_vel = 1.0
 ay_vel = 1.0
 
 # Grid size
-nx = 50
-ny = 50
+nx = 120
+ny = 120
 
 dx = 1.0 / (nx - 1)
 dy = 1.0 / (ny - 1)
@@ -51,7 +48,7 @@ lam_y = ay_vel * dt / dy
 nt = 100
 
 # --------------------------------------------------
-# DMDA grid (2D DIRICHLET / NON-PERIODIC)
+# DMDA grid
 # --------------------------------------------------
 da = PETSc.DMDA().create(
     dim=2,
@@ -63,27 +60,18 @@ da = PETSc.DMDA().create(
 da.setUniformCoordinates(xmin=0.0, xmax=1.0, ymin=0.0, ymax=1.0)
 
 # --------------------------------------------------
-# Initial condition (2D Top Hat / Square Wave)
+# Initial condition (2D Gaussian)
 # --------------------------------------------------
 u_initial = da.createGlobalVec()
-
-# --- IMPORTANT: Get grid ranges before the loop ---
 (xs, xe), (ys, ye) = da.getRanges()
-# --------------------------------------------------
 
 with da.getVecArray(u_initial) as arr:
     for j in range(ys, ye):
         for i in range(xs, xe):
             x = i * dx
             y = j * dy
-            
-            # Top Hat: Value is 1.0 if inside the box, 0.0 otherwise
-            # Center: (0.25, 0.25), Width/Height: 0.2
-            if (0.15 <= x <= 0.35) and (0.15 <= y <= 0.35):
-                arr[j, i] = 1.0
-            else:
-                arr[j, i] = 0.0
-
+            # Gaussian centered at (0.2, 0.2)
+            arr[j, i] = np.exp(-((x - 0.2)**2 + (y - 0.2)**2) / (2 * 0.05**2))
 
 # --------------------------------------------------
 # Matrix A assembly (IMPLICIT UPWIND 2D)
@@ -140,21 +128,22 @@ prev_centroid = None
 print("Starting Time Loop...")
 
 for step in range(nt):
-    u.copy(b)
-    ksp.solve(b, u_new)
-    u.copy(u_new)
+    u.copy(b)             # RHS = u^n
+    ksp.solve(b, u_new)   # Solve for u^{n+1}
+    
+    # --- FIXED BUG HERE ---
+    u_new.copy(u)         # Update u with the NEW solution
+    # ----------------------
     
     current_time = step * dt
     times.append(current_time)
     
-    # Get 2D array
+    # Get Data
     sol_array = u.getArray().reshape(ny, nx).copy()
     solution_history.append(sol_array)
-    
-    # Store Slice
     slice_history.append(sol_array[mid_y, :])
     
-    # Calculate Velocity (Centroid tracking)
+    # Velocity Tracking
     total_mass = np.sum(sol_array)
     if total_mass > 1e-10:
         Y_grid, X_grid = np.indices((ny, nx))
@@ -164,11 +153,9 @@ for step in range(nt):
         
         if prev_centroid is not None:
             dist = np.linalg.norm(current_centroid - prev_centroid)
-            inst_speed = dist / dt
-            velocities.append(inst_speed)
+            velocities.append(dist / dt)
         else:
             velocities.append(np.sqrt(ax_vel**2 + ay_vel**2))
-            
         prev_centroid = current_centroid
     else:
         velocities.append(0.0)
@@ -194,9 +181,9 @@ def update(frame):
     return im,
 
 ani = FuncAnimation(fig_anim, update, frames=nt, interval=50, blit=False)
-ani.save("2d-advection-upwind-tophat-heatmap.gif", dpi=100)
+ani.save("2d-advection-upwind-gaussian-heatmap.gif", dpi=100)
 plt.close(fig_anim)
-print("-> Saved: 2d-advection-upwind-tophat-heatmap.gif")
+print("-> Saved: 2d-advection-upwind-gaussian-heatmap.gif")
 
 # --------------------------------------------------
 # 2. Space-Time Graph (3D Surface Plot)
@@ -205,13 +192,11 @@ print("Generating Space-Time Surface Plot...")
 fig_st = plt.figure(figsize=(10, 7))
 ax_st = fig_st.add_subplot(111, projection='3d')
 
-# Prepare grids for plotting
 x_vals = np.linspace(0, 1, nx)
 t_vals = np.linspace(0, nt*dt, nt)
 X_mesh, T_mesh = np.meshgrid(x_vals, t_vals)
-Z_mesh = np.array(slice_history) # Shape (nt, nx)
+Z_mesh = np.array(slice_history) 
 
-# Plot Surface
 surf = ax_st.plot_surface(X_mesh, T_mesh, Z_mesh, cmap=cm.viridis, linewidth=0, antialiased=False)
 
 ax_st.set_xlabel('Space (x)')
@@ -219,13 +204,11 @@ ax_st.set_ylabel('Time (t)')
 ax_st.set_zlabel('u')
 ax_st.set_title(f'Space-Time Evolution (Slice at y={mid_y*dy:.2f})')
 fig_st.colorbar(surf, shrink=0.5, aspect=5, label='u magnitude')
-
-# Adjust view angle for better 3D perception
 ax_st.view_init(elev=30, azim=-60)
 
-plt.savefig("2d-advection-upwind-tophat-surface.png", dpi=150)
+plt.savefig("2d-advection-upwind-gaussian-surface.png", dpi=150)
 plt.close(fig_st)
-print("-> Saved: 2d-advection-upwind-tophat-surface.png")
+print("-> Saved: 2d-advection-upwind-gaussian-surface.png")
 
 # --------------------------------------------------
 # 3. 1D Slicing Snapshots
@@ -244,9 +227,9 @@ ax_slice.set_ylabel("u")
 ax_slice.legend()
 ax_slice.grid(True, alpha=0.3)
 
-plt.savefig("2d-advection-upwind-tophat-1d-slicing.png", dpi=150)
+plt.savefig("2d-advection-upwind-gaussian-1d-slicing.png", dpi=150)
 plt.close(fig_slice)
-print("-> Saved: 2d-advection-upwind-tophat-1d-slicing.png")
+print("-> Saved: 2d-advection-upwind-gaussian-1d-slicing.png")
 
 # --------------------------------------------------
 # 4. Speed vs Time Graph
@@ -265,6 +248,6 @@ analytic_speed = np.sqrt(ax_vel**2 + ay_vel**2)
 ax_speed.axhline(analytic_speed, color='k', linestyle='--', alpha=0.5, label=f'Analytic Speed ({analytic_speed:.2f})')
 ax_speed.legend()
 
-plt.savefig("2d-advection-upwind-tophat-ut.png", dpi=150)
+plt.savefig("2d-advection-upwind-gaussian-ut.png", dpi=150)
 plt.close(fig_speed)
-print("-> Saved: 2d-advection-upwind-tophat-ut.png")
+print("-> Saved: 2d-advection-upwind-gaussian-ut.png")
