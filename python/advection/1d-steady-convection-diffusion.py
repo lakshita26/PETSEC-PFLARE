@@ -77,6 +77,13 @@ for i in range(xs, xe):
 A.assemblyBegin()
 A.assemblyEnd()
 
+# Print the matrix to the console
+dense_A = A.getValues(range(n), range(n))
+
+print("\n--- Steady-State Matrix ---")
+# Use np.array2string to control formatting and suppress tiny values
+print(np.array2string(dense_A, precision=2, suppress_small=True, separator=', '))
+
 # --------------------------------------------------
 # Right-Hand Side (b) Assembly
 # --------------------------------------------------
@@ -96,7 +103,7 @@ u_sol = da.createGlobalVec()
 ksp = PETSc.KSP().create(comm=A.getComm())
 ksp.setOperators(A)
 ksp.setType(PETSc.KSP.Type.GMRES)
-ksp.getPC().setType(PETSc.PC.Type.GAMG) # Using AMG as in your example
+ksp.getPC().setType(PETSc.PC.Type.GAMG) 
 
 ksp.setFromOptions()
 ksp.solve(b, u_sol)

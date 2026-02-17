@@ -114,6 +114,16 @@ for k in range(zs, ze):
 A.assemblyBegin()
 A.assemblyEnd()
 
+# Pick an interior index (avoiding boundaries to see the full stencil)
+center_idx = (nx * ny * (nz // 2)) + (nx * (ny // 2)) + (nx // 2)
+subset_range = range(center_idx - 3, center_idx + 4)
+
+# Get the dense sub-block
+dense_block = A.getValues(subset_range, subset_range)
+
+print("\n--- 3D Interior Stencil (Small Sub-block) ---")
+print(np.array2string(dense_block, precision=2, suppress_small=True, separator=', '))
+
 # --------------------------------------------------
 # RHS Assembly
 # --------------------------------------------------

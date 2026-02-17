@@ -94,6 +94,29 @@ for j in range(ys, ye):
 A.assemblyBegin()
 A.assemblyEnd()
 
+subset = 10 
+# Fetch the values for the top-left corner
+dense_subset = A.getValues(range(subset), range(subset))
+
+print(f"\n--- Top-Left {subset}x{subset} Block of Matrix A ---")
+print(np.array2string(dense_subset, precision=2, suppress_small=True, separator=', '))# Pick an interior starting point (i=10, j=10)
+# Global index = j * nx + i
+start_i, start_j = 10, 10
+start_index = start_j * nx + start_i
+
+# We want to see a small block of the matrix around this interior point
+# Let's look at 5 consecutive rows to see how the stencil shifts
+subset_size = 5
+rows = range(start_index, start_index + subset_size)
+cols = range(start_index - 1, start_index + subset_size + 1) # Extra column for West neighbor
+
+# Fetch and print
+dense_interior = A.getValues(rows, cols)
+
+print(f"\n--- Interior {subset_size}x{len(cols)} Block (Starting at i={start_i}, j={start_j}) ---")
+print("Note: This shows the repeating 5-point stencil values.")
+print(np.array2string(dense_interior, precision=2, suppress_small=True, separator=', '))
+
 # --------------------------------------------------
 # RHS Assembly
 # --------------------------------------------------
@@ -137,6 +160,32 @@ plt.title("2D Steady Convection–Diffusion")
 plt.xlabel("x")
 plt.ylabel("y")
 plt.savefig("2d-steady-convection-diffusion.png")
+
+# --------------------------------------------------
+# 3D Surface Plot
+# --------------------------------------------------
+from mpl_toolkits.mplot3d import Axes3D
+
+fig = plt.figure(figsize=(10, 7))
+ax_3d = fig.add_subplot(111, projection='3d')
+
+# Create the meshgrid for the x and y axes
+x_coords = np.linspace(0.0, 1.0, nx)
+y_coords = np.linspace(0.0, 1.0, ny)
+X, Y = np.meshgrid(x_coords, y_coords)
+
+# Plot the surface
+surf = ax_3d.plot_surface(X, Y, solution, cmap='magma', edgecolor='none', alpha=0.9)
+
+# Add labels and formatting
+ax_3d.set_title("3D Surface Plot of Steady Convection–Diffusion")
+ax_3d.set_xlabel("x")
+ax_3d.set_ylabel("y")
+ax_3d.set_zlabel("u")
+fig.colorbar(surf, ax=ax_3d, shrink=0.5, aspect=10, label='u')
+
+plt.tight_layout()
+plt.savefig("2d-steady-surface-plot.png")
 
 # ----- 1D Line Plot (centerline slice) -----
 mid_y = ny // 2
